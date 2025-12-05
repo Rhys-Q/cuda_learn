@@ -88,3 +88,19 @@ Global 和 local 都有cache。
 
 使用cudaMalloc()函数申请内存，会保证至少256字节对齐。
 
+
+### 10.2.1.4 Strided Access
+``` c++
+__global__ void strideCopy(float *odata, float* idata, int stride)
+{
+    int xid = (blockIdx.x*blockDim.x + threadIdx.x)*stride;
+    odata[xid] = idata[xid];
+}
+```
+stride =2 的时候，有一半的transaction是无效的。等于4的时候，有3/4的transaction是无效的。
+直到每个thread读取的地址相隔32字节，再往后，性能就不变了。
+因为再往大，一个warp都是读取32个transaction。不会再变了。
+
+![alt text](../media/images/image-11.png)
+![alt text](../media/images/image-12.png)
+
