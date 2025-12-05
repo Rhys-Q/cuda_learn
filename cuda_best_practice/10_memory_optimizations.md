@@ -76,3 +76,15 @@ Global 和 local 都有cache。
 有一个结论，设计到硬件，除了shared memory，否则自动带入warp的视角。甚至shared memory也应该代入warp的视角，因为gpu是按照warp来执行的。
 
 对于compute capability 6.0及以上的卡，一个warp内thread的并行访问会被组织为多个事务，每个事务的大小是32字节。
+
+### 10.2.1.1 A Simple Access Pattern
+![alt text](../media/images/image-9.png)
+
+可以看到，warp的读取是以32byte为最小单位进行的。这张图中，读取了4x32 bytes。
+如果一个warp只需要读取32字节中的部分，warp也会完整读取32字节。
+### 10.2.1.2 A Sequential but Misaligned Access Pattern
+![alt text](../media/images/image-10.png)
+如果地址没有按照32字节对齐，那么warp会读取多个32字节，但是只使用其中的部分。
+
+使用cudaMalloc()函数申请内存，会保证至少256字节对齐。
+
