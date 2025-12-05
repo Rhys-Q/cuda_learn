@@ -104,3 +104,69 @@ stride =2 的时候，有一半的transaction是无效的。等于4的时候，�
 ![alt text](../media/images/image-11.png)
 ![alt text](../media/images/image-12.png)
 
+## 10.2.2 L2 Cache
+从cuda 11.0、compute capability 8.0开始，支持在L2 Cache中 persistence of data。
+因为L2 Cache是on-chip，相较于global mmeory，它能提供更高的带宽和更低的延迟。
+
+### 10.2.2.1 L2 Cache Window
+如果cuda kernel需要重复访问global memorey的同一个区域，那么这个区域可以做成persisting。
+如果cuda kernel对global memory的一个区域，只需要访问一次，那么考虑做成streaming的。
+可以将L2 Cache的一部分用于persistent accesses。
+``` c++
+cudaGetDeviceProperties(&prop, device_id);
+cudaDeviceSetLimit(cudaLimitPersistingL2CacheSize, prop.persistingL2CacheMaxSize); /* Set aside max possible size of L2 cache for persisting accesses */
+```
+可以设置persisting L2 Cache的大小。
+
+``` c++
+cudaStreamAttrValue stream_attribute;                                         // Stream level attributes data structure
+stream_attribute.accessPolicyWindow.base_ptr  = reinterpret_cast<void*>(ptr); // Global Memory data pointer
+stream_attribute.accessPolicyWindow.num_bytes = num_bytes;                    // Number of bytes for persisting accesses.
+stream_attribute.accessPolicyWindow.hitRatio  = 1.0;                          // Hint for L2 cache hit ratio for persisting accesses in the num_bytes region
+stream_attribute.accessPolicyWindow.hitProp   = cudaAccessPropertyPersisting; // Type of access property on cache hit
+stream_attribute.accessPolicyWindow.missProp  = cudaAccessPropertyStreaming;  // Type of access property on cache miss.
+
+//Set the attributes to a CUDA stream of type cudaStream_t
+cudaStreamSetAttribute(stream, cudaStreamAttributeAccessPolicyWindow, &stream_attribute);
+```
+通过配置stream_attribute的accessPolicyWindow属性，来将global memory的一个区域，配置为persisting accesses。
+
+注意，由于L2 Line是一个有限的资源，如果persisting accesses的区域太大，那么会导致L2 Cache的miss rate增加。因此，可以通过调整hitRatio来平衡L2 Cache的miss rate和bandwidth。
+
+### 10.2.2.2 Tuning the Access Window Hit-Ratio
+假设hitRatio是0.6，则一次对这个区域的访问中，60%的区域是persisting accesses，40%的区域是streaming accesses。
+![alt text](../media/images/image-13.png)
+
+文章中进行了一个实验，用NVIDIA Tesla A100GPU，它有40MB的L2 Cache。实验使用1024MB大小的global memory。设置了固定的30 MB 大小的L2 set-aside 区域。
+当实验中 persist size 小于30MB时，都能获得性能收益，最大有50%。
+但是当persist size 大于30MB时，性能就会出现下降。
+``` c++
+__global__ void kernel(int *data_persistent, int *data_streaming, int dataSize, int freqSize) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    /*Each CUDA thread accesses one element in the persistent data section
+      and one element in the streaming data section.
+      Because the size of the persistent memory region (freqSize * sizeof(int) bytes) is much
+      smaller than the size of the streaming memory region (dataSize * sizeof(int) bytes), data
+      in the persistent region is accessed more frequently*/
+
+    data_persistent[tid % freqSize] = 2 * data_persistent[tid % freqSize];
+    data_streaming[tid % dataSize] = 2 * data_streaming[tid % dataSize];
+}
+
+stream_attribute.accessPolicyWindow.base_ptr  = reinterpret_cast<void*>(data_persistent);
+stream_attribute.accessPolicyWindow.num_bytes = freqSize * sizeof(int);   //Number of bytes for persisting accesses in range 10-60 MB
+stream_attribute.accessPolicyWindow.hitRatio  = 1.0;                      //Hint for cache hit ratio. Fixed value 1.0
+```
+![alt text](../media/images/image-14.png)
+
+为了平衡L2 Cache的miss rate和bandwidth，需要根据实验结果，调整hitRatio。
+``` c++
+stream_attribute.accessPolicyWindow.base_ptr  = reinterpret_cast<void*>(data_persistent);
+stream_attribute.accessPolicyWindow.num_bytes = 20*1024*1024;                                  //20 MB
+stream_attribute.accessPolicyWindow.hitRatio  = (20*1024*1024)/((float)freqSize*sizeof(int));  //Such that up to 20MB of data is resident.
+```
+
+我们通过hitRatio，保证实际cache的区域最多就20MB。修改之后，性能如下：
+![alt text](../media/images/image-15.png)
+
