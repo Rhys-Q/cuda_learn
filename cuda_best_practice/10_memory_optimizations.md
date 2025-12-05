@@ -88,6 +88,36 @@ Global 和 local 都有cache。
 
 使用cudaMalloc()函数申请内存，会保证至少256字节对齐。
 
+### 10.2.1.3 Effects of Misaligned Accesses
+想要验证地址不对齐对性能的影响，可以用kernel进行实验。
+``` c++
+__global__ void offsetCopy(float *odata, float* idata, int offset)
+{
+    int xid = blockIdx.x * blockDim.x + threadIdx.x + offset;
+    odata[xid] = idata[xid];
+}
+```
+![alt text](../media/images/image-10.png)
+
+可以看到，不同的offset，对性能的影响是不同的。当offset是32字节的倍数时，性能是最优的。
+
+上面kernel，每个thread从global memory中读取一个float，然后写入global memory。一个warp有32个thread，所以一个warp需要读取4x32=128字节。即4个32字节的transaction。
+当地址不对齐时，每个warp需要读取5个transaction，而不是4个。
+
+### 10.2.1.4 Strided Accesses
+
+虽然没对齐，但由于global memory的访问有cache，所以从结果看不是很明显。
+``` c++
+__global__ void strideCopy(float *odata, float* idata, int stride)
+{
+    int xid = (blockIdx.x*blockDim.x + threadIdx.x)*stride;
+    odata[xid] = idata[xid];
+}
+```
+
+为什么有32字节的transaction size？因为warp访问global memory，是有L2 Cache的，L2 Cache的line size是32字节。
+![alt text](../media/images/image-11.png)
+
 
 ### 10.2.1.4 Strided Access
 ``` c++
@@ -169,4 +199,5 @@ stream_attribute.accessPolicyWindow.hitRatio  = (20*1024*1024)/((float)freqSize*
 
 我们通过hitRatio，保证实际cache的区域最多就20MB。修改之后，性能如下：
 ![alt text](../media/images/image-15.png)
+
 
