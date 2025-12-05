@@ -201,3 +201,62 @@ stream_attribute.accessPolicyWindow.hitRatio  = (20*1024*1024)/((float)freqSize*
 ![alt text](../media/images/image-15.png)
 
 
+## 10.2.3 Shared Memory
+由于shared memory是on-chip的，所以与global memory、local memory相比，访问shared memory的延迟要低很多。
+
+### 10.2.3.1 Shared Memory and Memory Banks
+对shared memory的读写，是通过bank进行的。一般每个ctx有32个bank，32个bank可以同时进行读写。
+对于compute capability 5.0以上，每个bank每个clock cycle有32bit的带宽，即4字节。
+
+### 10.2.3.2 Shared Memory in Matrix Multiplication(C=AB)
+shared memory 让一个block中的thread可以进行合作。
+当一个block中的多个thread使用了global memory相同的数据。
+这里以C=AB为例，介绍shared memory的使用。
+首先是没有任何优化：
+``` c++
+__global__ void simpleMultiply(float *a, float* b, float *c,
+                               int N)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float sum = 0.0f;
+    for (int i = 0; i < TILE_DIM; i++) {
+        sum += a[row*TILE_DIM+i] * b[i*N+col];
+    }
+    c[row*N+col] = sum;
+}
+```
+直接从global memory中load数据到register。最后写入global memory。
+这个实现中，warp中的每个thread，load A的一行，以及B的一列，做mma计算，然后写入c。
+这个kernel在Tesla V100上可以达到119.9 GB/s。
+![alt text](../media/images/image-16.png)
+
+这个kernel，对b矩阵的访问是高效的，每个warp中的thread，访问了b的不同元素，而且是连续的，可以合并。
+但是对a的访问则是低效的，每个warp的thread，都访问了a的同一个元素。相当于只用了一个cache line的4个字节，剩下的28个字节被浪费。
+“那剩下的 7 个 float 不就能在后续 i+1、i+2 中用了吗？”
+理论上可以，但现实中：
+一个 SM 会同时执行大量 warps
+每个 warp 都会访问自己的 A[row][i]
+cache 容量有限
+那一条 cache line 很可能在下一次迭代前已经被挤掉（evicted）
+➡️ cache line 重复加载 → 重复浪费带宽
+
+
+使用shared memory提高load效率
+``` c++
+__global__ void coalescedMultiply(float *a, float* b, float *c,
+                                  int N)
+{
+    __shared__ float aTile[TILE_DIM][TILE_DIM];
+
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float sum = 0.0f;
+    aTile[threadIdx.y][threadIdx.x] = a[row*TILE_DIM+threadIdx.x];
+    __syncwarp();
+    for (int i = 0; i < TILE_DIM; i++) {
+        sum += aTile[threadIdx.y][i]* b[i*N+col];
+    }
+    c[row*N+col] = sum;
+}
+```
