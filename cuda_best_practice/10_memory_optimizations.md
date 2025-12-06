@@ -346,3 +346,57 @@ __shared__ float transposedTile[TILE_DIM][TILE_DIM+1];
 1. 为了实现global memory的coalesced access，特别是针对global memory stride access的场景。
 2. 为了消除或者减少对于global memory的重复加载。
 3. 为了避免浪费带宽。
+
+### 10.2.3.4 Asynchronous Copy from Global Memory to Shared Memory
+cuda 11.0引入了async-copy。
+``` c++
+template <typename T>
+__global__ void pipeline_kernel_sync(T *global, uint64_t *clock, size_t copy_count) {
+  extern __shared__ char s[];
+  T *shared = reinterpret_cast<T *>(s);
+
+  uint64_t clock_start = clock64();
+
+  for (size_t i = 0; i < copy_count; ++i) {
+    shared[blockDim.x * i + threadIdx.x] = global[blockDim.x * i + threadIdx.x];
+  }
+
+  uint64_t clock_end = clock64();
+
+  atomicAdd(reinterpret_cast<unsigned long long *>(clock),
+            clock_end - clock_start);
+}
+
+template <typename T>
+__global__ void pipeline_kernel_async(T *global, uint64_t *clock, size_t copy_count) {
+  extern __shared__ char s[];
+  T *shared = reinterpret_cast<T *>(s);
+
+  uint64_t clock_start = clock64();
+
+  //pipeline pipe;
+  for (size_t i = 0; i < copy_count; ++i) {
+    __pipeline_memcpy_async(&shared[blockDim.x * i + threadIdx.x],
+                            &global[blockDim.x * i + threadIdx.x], sizeof(T));
+  }
+  __pipeline_commit();
+  __pipeline_wait_prior(0);
+
+  uint64_t clock_end = clock64();
+
+  atomicAdd(reinterpret_cast<unsigned long long *>(clock),
+            clock_end - clock_start);
+}
+```
+同步copy，会阻塞thread，copy路线是global memory -> L2 cache -> L1 cahche -> Register -> Shared memory。
+async copy择不会阻塞thread，copy路线是global memorey -> L2 Cache -> L1 cache(可选绕过) -> Shared memory。
+![alt text](../media/images/image-18.png)
+
+我们进行了性能实验：
+![alt text](../media/images/image-19.png)
+
+从实验中可以得出以下结论：
+1. 对于sync copy，当copy_count是4的倍数的时候，性能最好。
+2. async copy性能最好。
+3. 对于async copy，不需要copy_count是4的倍数。
+4. 最佳性能是在async copy，element_size是8或者16的时候达成。
