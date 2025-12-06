@@ -341,3 +341,8 @@ transposedTile，从global memory加载数据，向transposedTile写入时，会
 __shared__ float transposedTile[TILE_DIM][TILE_DIM+1];
 ```
 ![alt text](../media/images/image-17.png)
+
+上面的例子，给出了使用shared memory的三个原因：
+1. 为了实现global memory的coalesced access，特别是针对global memory stride access的场景。
+2. 为了消除或者减少对于global memory的重复加载。
+3. 为了避免浪费带宽。
