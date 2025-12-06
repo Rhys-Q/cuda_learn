@@ -296,3 +296,48 @@ __global__ void sharedABMultiply(float *a, float* b, float *c,
 但是这个会触发bank conflict吗？不会，因为假设是TILE_DIM=32，元素类型为fp32，访问b时，每个warp恰好访问4x32个字节，打满了一轮bank。
 
 注意，分析是否产生bank conflict，是站在warp的角度进行的，因为warp是真正的执行单元。
+
+### 10.2.2.3 Shared Memory in Matrix Multiplication (C=AAT)
+本小节讨论如何处理stride access，如何处理bank conflict。
+最简单的实现如下所示：
+``` c++
+__global__ void simpleMultiply(float *a, float *c, int M)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float sum = 0.0f;
+    for (int i = 0; i < TILE_DIM; i++) {
+        sum += a[row*TILE_DIM+i] * a[col*TILE_DIM+i];
+    }
+    c[row*M+col] = sum;
+}
+```
+每个thread在计算时，会加载a的一行，以及a的一列。但是这个kernel的性能只有12.8 GB/s。主要原因就是a[col*TILE_DIM+i]这个访问是stride access，导致warp 读取global memory效率很低。
+
+所以可以使用shared memory来优化这个kernel。
+``` c++
+__global__ void coalescedMultiply(float *a, float *c, int M)
+{
+    __shared__ float aTile[TILE_DIM][TILE_DIM],
+                     transposedTile[TILE_DIM][TILE_DIM];
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float sum = 0.0f;
+    aTile[threadIdx.y][threadIdx.x] = a[row*TILE_DIM+threadIdx.x];
+    transposedTile[threadIdx.x][threadIdx.y] =
+        a[(blockIdx.x*blockDim.x + threadIdx.y)*TILE_DIM +
+        threadIdx.x];
+    __syncthreads();
+    for (int i = 0; i < TILE_DIM; i++) {
+        sum += aTile[threadIdx.y][i]* transposedTile[i][threadIdx.x];
+    }
+    c[row*M+col] = sum;
+}
+```
+transposedTile，从global memory加载数据，向transposedTile写入时，会触发bank conflict。
+因为threadIdx.y是32的倍数。
+为了解决这个问题，使用padding的方式：
+``` c++
+__shared__ float transposedTile[TILE_DIM][TILE_DIM+1];
+```
+![alt text](../media/images/image-17.png)
