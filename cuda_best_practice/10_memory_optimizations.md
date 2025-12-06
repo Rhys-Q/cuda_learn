@@ -260,3 +260,39 @@ __global__ void coalescedMultiply(float *a, float* b, float *c,
     c[row*N+col] = sum;
 }
 ```
+这里其实是有假设的，假设一个ctx里面thread的shape为(TILE_DIM, TILE_DIM)。
+每个ctx负责计算一个TILE_DIM*TILE_DIM的block。每个thread 负责计算c中的一个元素，即c[row, col]。
+在这里的实现中，一个ctx中的thread先通过coalesced load，将这个ctx负责的a中的tile加载到shared memory中，然后后面的for循环就直接从shared memory中读取数据，做mma计算。
+注意，在for loop中，每次所有thread都会从shared memory中读取相同的数据，所以这里还用到了shared memory的broadcast机制。
+
+此外，注意这里用的是__syncwarp();因为在这个场景中，只需要warp中所有thread都执行完coalesced load，就可以开始做mma计算。不需要整个ctx的thread都执行完coalesced load。
+
+计算的效率达到了144.4 GB/s 
+
+其实还可以进一步优化，我们注意到，每个warp都会完整地从global memorey读取一次b矩阵tile。因此如果将b矩阵tile也最开始就搬运到shared memory中，就可以避免后续的重复读取。
+
+``` c++
+__global__ void sharedABMultiply(float *a, float* b, float *c,
+                                 int N)
+{
+    __shared__ float aTile[TILE_DIM][TILE_DIM],
+                     bTile[TILE_DIM][TILE_DIM];
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    float sum = 0.0f;
+    aTile[threadIdx.y][threadIdx.x] = a[row*TILE_DIM+threadIdx.x];
+    bTile[threadIdx.y][threadIdx.x] = b[threadIdx.y*N+col];
+    __syncthreads();
+    for (int i = 0; i < TILE_DIM; i++) {
+        sum += aTile[threadIdx.y][i]* bTile[i][threadIdx.x];
+    }
+    c[row*N+col] = sum;
+}
+```
+注意，在这个实现中，需要调用__syncthreads来实现同步，确保所有thread都执行完coalesced load。这是因为b的加载，一个warp用到的b shared memory tile，还依赖其他warp的thread加载。
+
+这个kernel的性能是195.5 GB/s ，主要收益来自于shared memory的使用，避免了重复从global memory取加载b tile。
+
+但是这个会触发bank conflict吗？不会，因为假设是TILE_DIM=32，元素类型为fp32，访问b时，每个warp恰好访问4x32个字节，打满了一轮bank。
+
+注意，分析是否产生bank conflict，是站在warp的角度进行的，因为warp是真正的执行单元。
