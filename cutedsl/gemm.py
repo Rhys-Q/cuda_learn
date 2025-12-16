@@ -119,8 +119,12 @@ class TensorOpGemm:
         self.mma_inst_shape = (16, 8, 16)
         mmaM, mmaN, mmaK = self.mma_inst_shape
 
-        assert self.bM % (atom_lay_M * mmaM) == 0, "bM must be divisible by MMA instruction"
-        assert self.bN % (atom_lay_N * mmaN) == 0, "bN must be divisible by MMA instruction"
+        assert (
+            self.bM % (atom_lay_M * mmaM) == 0
+        ), "bM must be divisible by MMA instruction"
+        assert (
+            self.bN % (atom_lay_N * mmaN) == 0
+        ), "bN must be divisible by MMA instruction"
         assert atom_lay_K == 1, "this example does not support atom layout K > 1"
         assert self.bK % mmaK == 0, "bK must be divisible by MMA instruction"
         assert self.num_stages >= 3, "num_stages must be greater than or equal to 3"
@@ -157,13 +161,21 @@ class TensorOpGemm:
             mA.element_type,
             self.a_major_mode,
             ab_copy_bits,
-            (self.cta_tiler[0], self.cta_tiler[2], self.num_stages),  # [m, k, num_stage]
+            (
+                self.cta_tiler[0],
+                self.cta_tiler[2],
+                self.num_stages,
+            ),  # [m, k, num_stage]
         )
         sB_layout = self._make_smem_layout_AB(
             mB.element_type,
             self.b_major_mode,
             ab_copy_bits,
-            (self.cta_tiler[1], self.cta_tiler[2], self.num_stages),  # [n, k, num_stage]
+            (
+                self.cta_tiler[1],
+                self.cta_tiler[2],
+                self.num_stages,
+            ),  # [n, k, num_stage]
         )
 
         # Creates a similar layout but without num_stages or layout atoms
@@ -192,7 +204,9 @@ class TensorOpGemm:
 
         # Create a copy atom for a global to shared memory asynchronous copy
         atom_async_copy = cute.make_copy_atom(
-            cute.nvgpu.cpasync.CopyG2SOp(cache_mode=cute.nvgpu.cpasync.LoadCacheMode.GLOBAL),
+            cute.nvgpu.cpasync.CopyG2SOp(
+                cache_mode=cute.nvgpu.cpasync.LoadCacheMode.GLOBAL
+            ),
             mA.element_type,
             num_bits_per_copy=ab_copy_bits,
         )
@@ -202,6 +216,7 @@ class TensorOpGemm:
         tiled_copy_A = self._make_gmem_tiled_copy_AB(
             atom_async_copy, mA.element_type, self.a_major_mode, ab_copy_bits
         )
+        breakpoint()
         tiled_copy_B = self._make_gmem_tiled_copy_AB(
             atom_async_copy, mB.element_type, self.b_major_mode, ab_copy_bits
         )
@@ -222,7 +237,9 @@ class TensorOpGemm:
         # ///////////////////////////////////////////////////////////////////////////////
 
         # Creates a mma atom with 16x8x16 shape for MNK
-        op = cute.nvgpu.warp.MmaF16BF16Op(self.ab_dtype, self.acc_dtype, self.mma_inst_shape)
+        op = cute.nvgpu.warp.MmaF16BF16Op(
+            self.ab_dtype, self.acc_dtype, self.mma_inst_shape
+        )
 
         permutation_mnk = (
             self.atom_layout_mnk[0] * self.mma_inst_shape[0],
@@ -300,7 +317,9 @@ class TensorOpGemm:
         tidx, _, _ = cute.arch.thread_idx()
         bidx, bidy, bidz = cute.arch.block_idx()
         grid_dim = cute.ceil_div(mC.shape, (self.bM, self.bN, 1))
-        offset_tile_x, offset_tile_y = self.raster_tile(bidx, bidy, rasterization_factor)
+        offset_tile_x, offset_tile_y = self.raster_tile(
+            bidx, bidy, rasterization_factor
+        )
         # Early exit if CTA is out of range
         if grid_dim[0] <= offset_tile_x or grid_dim[1] <= offset_tile_y:
             pass
@@ -338,7 +357,9 @@ class TensorOpGemm:
 
             # residual_k is a negative number indicating the amount needed to
             # shift the pointer by in dimension k
-            residual_k = cute.size(mA, mode=[1]) - cutlass.Int32(self.bK) * cute.size(gA, mode=[2])
+            residual_k = cute.size(mA, mode=[1]) - cutlass.Int32(self.bK) * cute.size(
+                gA, mode=[2]
+            )
 
             # move the pointer of gA/gB in the `-k` direction
             gA = cute.domain_offset((0, residual_k, 0), gA)
@@ -378,7 +399,13 @@ class TensorOpGemm:
 
             sA = smem.allocate_tensor(mA.element_type, sA_layout, 16)
             sB = smem.allocate_tensor(mB.element_type, sB_layout, 16)
-            sC = cute.make_tensor(cute.recast_ptr(sA.iterator, dtype=self.c_dtype), sC_layout)
+            sC = cute.make_tensor(
+                cute.recast_ptr(sA.iterator, dtype=self.c_dtype), sC_layout
+            )
+            if tidx == 0 and bidx == 0 and bidy == 0 and bidz == 0:
+                print(sA)
+                print(sB)
+                print(sC)
 
             thr_copy_A = tiled_copy_A.get_slice(tidx)
             thr_copy_B = tiled_copy_B.get_slice(tidx)
@@ -437,10 +464,14 @@ class TensorOpGemm:
             # Set predicates for M/N bounds
             for rest_v in range(tApA.shape[0]):
                 for m in range(tApA.shape[1]):
-                    tApA[rest_v, m, 0] = cute.elem_less(tAcA[(0, rest_v), m, 0, 0][0], mA.shape[0])
+                    tApA[rest_v, m, 0] = cute.elem_less(
+                        tAcA[(0, rest_v), m, 0, 0][0], mA.shape[0]
+                    )
             for rest_v in range(tBpB.shape[0]):
                 for n in range(tBpB.shape[1]):
-                    tBpB[rest_v, n, 0] = cute.elem_less(tBcB[(0, rest_v), n, 0, 0][0], mB.shape[0])
+                    tBpB[rest_v, n, 0] = cute.elem_less(
+                        tBcB[(0, rest_v), n, 0, 0][0], mB.shape[0]
+                    )
 
             # ///////////////////////////////////////////////////////////////////////////////
             # Prefetch Prologue
@@ -700,7 +731,9 @@ class TensorOpGemm:
             )
             for rest_v in range(tCpC.shape[0]):
                 for m in range(tCpC.shape[1]):
-                    tCpC[rest_v, m, 0] = cute.elem_less(tCcC[(0, rest_v), m, 0][0], mC.shape[0])
+                    tCpC[rest_v, m, 0] = cute.elem_less(
+                        tCcC[(0, rest_v), m, 0][0], mC.shape[0]
+                    )
 
             # Copy to global memory using better vectorization
             for rest_v in range(tCpC.shape[0]):
@@ -842,7 +875,9 @@ def run(
 ):
     print("Running Ampere tensor core GEMM example:")
     print(f"mnkl: {mnkl}")
-    print(f"A dtype: {ab_dtype}, B dtype: {ab_dtype}, C dtype: {c_dtype}, Acc dtype: {acc_dtype}")
+    print(
+        f"A dtype: {ab_dtype}, B dtype: {ab_dtype}, C dtype: {c_dtype}, Acc dtype: {acc_dtype}"
+    )
     print(f"Matrix majors - A: {a_major}, B: {b_major}, C: {c_major}")
     print(f"Atoms layout: {atom_layout_mnk}")
     print(f"Warmup iterations: {warmup_iterations}")
@@ -942,13 +977,19 @@ if __name__ == "__main__":
         try:
             return tuple(int(x.strip()) for x in s.split(","))
         except ValueError:
-            raise argparse.ArgumentTypeError("Invalid format. Expected comma-separated integers.")
+            raise argparse.ArgumentTypeError(
+                "Invalid format. Expected comma-separated integers."
+            )
 
     parser = argparse.ArgumentParser(
         description="example of multistage block matmul with CuTe on GPU"
     )
-    parser.add_argument("--mnkl", type=parse_comma_separated_ints, default=(112, 136, 40, 1))
-    parser.add_argument("--atom_layout_mnk", type=parse_comma_separated_ints, default=(2, 2, 1))
+    parser.add_argument(
+        "--mnkl", type=parse_comma_separated_ints, default=(112, 136, 40, 1)
+    )
+    parser.add_argument(
+        "--atom_layout_mnk", type=parse_comma_separated_ints, default=(2, 2, 1)
+    )
     parser.add_argument(
         "--ab_dtype",
         type=cutlass.dtype,
