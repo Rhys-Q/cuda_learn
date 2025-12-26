@@ -63,6 +63,31 @@
 ### swizzle的原理？为什么要使用xor操作？
 ### swizzle可以100%避免bank conflict吗？
 ### swizzle 的设计目标到底是什么？是减少 bank conflict？还是让 ldmatrix 可用？还是让 warp 内访存更均匀？
+### swizzle 会影响 global memory 访问吗？swizzle 只作用于 shared memory 吗？是否存在 gmem → smem → reg 三段 swizzle 不一致的问题？
+### swizzle 是否有“最佳形态”？XOR 是经验规则，还是理论最优？是否存在针对特定 tile 的定制 swizzle？CuTe 是否允许用户自定义 swizzle？
 
 ## register->shared memorey
 ### 为什么不直接 reg → gmem？
+
+## Layout / CuTe DSL 抽象
+### CuTe 的 layout 抽象会不会引入额外开销？是否完全在 compile-time 消解？是否存在 runtime address computation？和手写 pointer arithmetic 相比是否等价？
+
+### layout 的表达能力是否有限？是否能表达所有 CUTLASS layout？是否能表达非矩形、非连续 tile？哪些 layout 在 CuTe 中“写得出来但跑不快”？
+
+### CuTe 在做 layout 推导时，会进行哪些隐式优化？是否会自动 fuse layout？是否会消除中间 layout？用户能否控制这些行为？
+
+
+## Pipeline / 并行性
+### 为什么是“双重 pipeline”，而不是单一 pipeline？如果只有 cp.async pipeline 会发生什么？如果只有 mma pipeline 会发生什么？两者的 bottleneck 如何判断？
+
+### pipeline 深度是否存在“理论最优值”？是否与 GPU SM 数量有关？是否与 Tensor Core 数量有关？不同 GPU（A100 vs RTX 30）是否不同？
+
+### pipeline 和 occupancy 的权衡如何做？更深 pipeline vs 更多 block？register / smem 压力如何量化？实战中优先牺牲哪一个？
+
+## Epilogue / Store
+### 为什么 epilogue 经常成为 GEMM 的瓶颈？compute-bound → memory-bound 的转折点?activation / bias / scaling 的代价? 和 main loop 相比，哪些优化是“值得做的”？
+### epilogue 是否可以和下一层 GEMM fuse？在 CuTe / CUTLASS 中是否可行？受限于哪些因素？现实中为什么很少这么做？
+
+## 架构相关（Ampere 特有）
+### 这些设计在 Hopper 上还成立吗？cp.async vs TMA? ldmatrix 是否还存在？tiled_mma 是否发生变化？
+### Ampere 的哪些限制“塑造了”今天的 CuTe 设计？warp size, bank 数量, Tensor Core shape？
