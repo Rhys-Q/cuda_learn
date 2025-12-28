@@ -216,10 +216,10 @@ class TensorOpGemm:
         tiled_copy_A = self._make_gmem_tiled_copy_AB(
             atom_async_copy, mA.element_type, self.a_major_mode, ab_copy_bits
         )
-        breakpoint()
         tiled_copy_B = self._make_gmem_tiled_copy_AB(
             atom_async_copy, mB.element_type, self.b_major_mode, ab_copy_bits
         )
+        breakpoint()
 
         # Creates a synchronous copy atom and thread layouts for the epilogue
         c_copy_bits = 128
@@ -403,9 +403,9 @@ class TensorOpGemm:
                 cute.recast_ptr(sA.iterator, dtype=self.c_dtype), sC_layout
             )
             if tidx == 0 and bidx == 0 and bidy == 0 and bidz == 0:
+                print(gA)
+                print(gB)
                 print(sA)
-                print(sB)
-                print(sC)
 
             thr_copy_A = tiled_copy_A.get_slice(tidx)
             thr_copy_B = tiled_copy_B.get_slice(tidx)
