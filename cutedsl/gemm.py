@@ -480,10 +480,7 @@ class TensorOpGemm:
             tAsA.fill(0)
             tBsB.fill(0)
             cute.arch.sync_threads()
-            # Start async loads for the first k-tile. Here we take care of the k residue
-            # via if/else check along the k dimension. Because we shifted the identity tensor
-            # by the residue_k and because the identity tensor is a coord tensor, the
-            # values of any identity tensor element that is poison is less than -1
+            # Start async loads for the first k-tile.
             num_smem_stages = cute.size(tAsA, mode=[3])
             k_tile_count = cute.size(tAgA, mode=[3])
             k_tile_index = cutlass.Int32(0)
