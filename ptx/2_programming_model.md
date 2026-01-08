@@ -12,3 +12,4 @@ grid、cluster、ctx、thread。
 
 ## 2.3 Memory Hierarchy
 
+![alt text](../media/images/image-23.png)
