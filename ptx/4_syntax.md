@@ -62,3 +62,4 @@ PTX有一些预定义好的变量名称：
 ## 4.5 Constants
 
 PTX支持integer和floating-point constant，以及constant expressions。
+这些常量可以用于数据初始化以及指令的操作数。
