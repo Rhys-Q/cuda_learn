@@ -64,4 +64,21 @@ $L__BB0_2:
 - .align 8 表示参数对齐为8字节
 - .b8 是参数类型，表示参数是一个8bit的list
 - .b8 kernel_cutlass_vector_add_tensorptrf32gmemo10485761_tensorptrf32gmemo10485761_tensorptrf32gmemo10485761_0_param_0[8] 表示这个参数是一个8bit的list，长度为8。这里的含义其实是表示一个指针，因为地址是64bit，所以是.b8[8]。
+- .reqntid 128, 1, 1 。表示这个ctx的block size。
+- .reg .pred 	%p<2>; .reg 用于声明寄存器，.pred表示这是一个predicate寄存器，用于条件判断。 %p<2> 定义一个名字前缀为 %p 的寄存器数组，共 2 个，分为是%p0和%p1。
+- .reg .b32 	%r<5>; 声明 5 个 32-bit 的通用寄存器 %r0 ～ %r4。 .reg <type> <name><count>;  注意这里是b32，只是表示是32个bit，没有类型信息。
+- .reg .f32 	%f<4>; 声明 4 个 32-bit 的浮点数寄存器 %f0 ～ %f3。
+- .reg .b64 	%rd<8>; 声明 8 个 64-bit 的通用寄存器 %rd0 ～ %rd7。看上去是用于存储指针的。
+- ld.param.u64 	%rd3, [kernel_cutlass_vector_add_tensorptrf32gmemo10485761_tensorptrf32gmemo10485761_tensorptrf32gmemo10485761_0_param_2]; ld表示加载数据，param表示从param space中加载，表示从输入参数空间中加载，u64表示加载64bit数据。	这一行表示将第三个参数加载到%rd3寄存器中。
+- mov.u32 	%r2, %tid.x; 这里的%tid.x表示线程id的x坐标。将它赋值给%r2寄存器。
+- mov.u32 	%r3, %ctaid.x; 这里的%ctaid.x表示block id的x坐标。将它赋值给%r3寄存器。
+- mov.u32 	%r4, %ntid.x; %ntid.x 表示blockDim.x，即每个block的线程x维度的大小。将它赋值给%r4寄存器。
+- mad.lo.s32 	%r1, %r3, %r4, %r2; mad是乘加指令，.lo表示取乘法结果的低32位，s32表示是有符号的32位整数。格式是 %r1 = %r3 * %r4 + %r2。在这里的作用是计算offset。
+- setp.gt.s32 	%p1, %r1, 1048575; setp 表示设置predicate寄存器，gt表示大于，s32表示是32位有符号整数。这里的作用是判断%r1是否大于1048575，如果大于，%p1就会被设置为1，否则为0。	
+- @%p1 bra 	$L__BB0_2; @%p1 条件执行（predicated execution），只有 %p1 为 true 时执行指令。bra 表示跳转指令，跳转到\$L__BB0_2。往下面看\$L__BB0_2 label对应的是return。
+- mul.wide.s32 	%rd4, %r1, 4; mul表示是乘法，wide表示的是输出比输入的bit更宽，这里输入是32bit，输出是64bit。s32表示是32位有符号整数。这里的含义是将%r1中的值乘以4，结果存储在%rd4中。用于计算vector_add byte偏移量。
+- add.s64 	%rd5, %rd1, %rd4; add表示是加法，s64表示是64位有符号整数。这里的含义是将%rd1中的值加上%rd4中的值，结果存储在%rd5中。用于计算vector_add的地址。
+- ld.global.f32 	%f1, [%rd5]; ld.global.f32表示从global memory中取出一个32bit的浮点数，存储在%f1寄存器中。地址由%rd5给出。[%rd5]表示取出%rd5寄存器中的值作为地址。
+- st.global.f32 	[%rd7], %f3; st.global.f32表示将%f3寄存器中的值存储到global memory中。地址由%rd7给出。[%rd7]表示将%rd7寄存器中的值作为地址。
+
 
