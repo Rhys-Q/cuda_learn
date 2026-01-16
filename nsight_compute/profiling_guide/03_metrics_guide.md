@@ -69,4 +69,5 @@ peer memory是指在多个GPU的场景中，GPU A 可以访问GPU B的global mem
 至于为什么是49bit，是因为硬件成本限制、MMU/TLB限制。
 
 ### local memory
-local memory是每个thread私有的，一般是device kernel 函数中的自变量。
+local memory是每个thread私有的，一般是device kernel 函数中的自变量。编译器会在以下场景中将自变量分配到local memory：
+- 
