@@ -69,5 +69,23 @@ peer memory是指在多个GPU的场景中，GPU A 可以访问GPU B的global mem
 至于为什么是49bit，是因为硬件成本限制、MMU/TLB限制。
 
 ### local memory
-local memory是每个thread私有的，一般是device kernel 函数中的自变量。编译器会在以下场景中将自变量分配到local memory：
-- 
+local memory是每个thread私有的，一般是device kernel 函数中的自变量。
+它是global memory，也挺慢的，不是寄存器。
+编译器会在以下场景中将自变量分配到local memory：
+- 下标不是编译器常量的数组，比如float x = a[i]；
+- 太大的数组，比如float a[256]。因为寄存器资源是有限且珍贵的，线程用寄存器多了，会导致占用降低。所以编译器就尝试直接丢了local memory。
+- 寄存器溢出。当kernel计算很复杂，inlining很多、unrolling多、模版展开爆炸时，寄存器需求大于硬件上限，编译器只能把一部分本该在寄存器里的变量，溢出到local memory。
+
+local memory会对性能造成很大的影响，尽量不要有local memory的读写。local memory的访问模式是full coalesced。这点和global memory不同。
+
+为了最小化local memory的影响，我们可以：
+- 优先用prefer registers。
+- 利用shared memory。
+- 增加可用寄存器数量。
+- 增加L1 cache的大小。如果local memory不可避免，尝试让local memory的访问命中cache。
+- 如果cache竞争激烈，尝试用non-caching global memory load。
+
+### Shared memory
+
+每个SM上的shared memory是on-chip的。on-chip是指在物理上是集成在GPU芯片内部的，而不是在芯片外部的显存颗粒里面。on-chip一般快。
+
