@@ -89,3 +89,27 @@ local memory会对性能造成很大的影响，尽量不要有local memory的�
 
 每个SM上的shared memory是on-chip的。on-chip是指在物理上是集成在GPU芯片内部的，而不是在芯片外部的显存颗粒里面。on-chip一般快。
 
+shared memory有32个bank，32个连续word可以被映射到32个bank，同时访问。
+
+当然，如果两个word落到了同一个bank，就会发生bank conflict。
+如果两个thread访问相同的地址，则会发生broadcast，一个thread在收到数据后，会broadcast到其他thread。
+
+## Cache
+
+gpu上所有单元都是通过L2 cache来访问global memory的。L2 cache位于on-chip memory和framebuffer之间。这里的framebuffer是指gpu芯片外的显存，也就是global memory。
+
+L2 在物理地址层面工作，除了cache能力，L2也可以实现压缩和全局原子操作的能力。
+
+![alt text](../../media/images/image-37.png)
+
+每个TPC有两个L1 cache，每个SM有一个L1 cache。需要注意，L1 cache、shared data、texture cache这些都是同一个东西。
+
+L1 从两个单元接收请求：SM和TEX。L1 从SM接收到global memory、local memory的请求。从TEX接收到texture和surface的请求。
+这些操作都是L2 先从global memory读取数据，然后缓存到L1 cache。
+
+![alt text](../../media/images/image-38.png)
+
+## Texture/Surface
+
+TEX单元负责texture fetching 和filtering。
+这部分不用关注。
