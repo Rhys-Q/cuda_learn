@@ -114,3 +114,36 @@ L1 从两个单元接收请求：SM和TEX。L1 从SM接收到global memory、loc
 TEX单元负责texture fetching 和filtering。
 这部分不用关注。
 
+# 2 Metrics Structure
+
+## Metrics Overview
+ncu的指标原始数值都是一些计数器，比如指令数、访存次数等，ncu能体现这些指标离理论峰值还有多远。
+吞吐率指标会返回他们计数器的最大百分比。但并不是所有的指标都能拿来和理论峰值做比较，比如只统计命中L1的load等指标。
+
+每个计数器有两类峰值：瞬时峰值、稳定峰值。瞬时峰值是一个时钟周期能达到的最大的峰值，稳定峰值是在一个长时间段内能达到的最大峰值。一般看稳定峰值。
+
+## Metrics Entities
+### Counters
+计数器类型的指标
+
+每个指标都统计了 sum、avg、max、min 这几个值。
+此外，还有这些子项：
+- .peak_sustained：稳定的峰值
+- .peak_sustained_active：在单元active期间，稳定的峰值
+- .peak_sustained_active.per_second：在单元active期间，稳定的峰值，以秒为单位统计
+- .peak_sustained_elapsed：在整个kernel运行时间内，稳定的峰值
+- .peak_sustained_elapsed.per_second：在整个kernel运行时间内，稳定的峰值，以秒为单位统计
+- .per_second：每秒统计的指标数量
+- .per_cycle_active：仅统计active cycle，每个cycle统计的指标数量
+- .per_cycle_elapsed：在整个kernel运行时间内，每个cycle统计的指标数量
+- .pct_of_peak_sustained_active：仅统计active cycle，稳定峰值达成的百分比
+- .pct_of_peak_sustained_elapsed：在整个kernel运行时间内，稳定峰值达成的百分比
+### Ratios
+
+比率类型指标
+有三种子指标：
+- .pct 百分比
+- .ratio 比率
+- .max_rate，最大的比率
+
+### Throughputs
