@@ -147,3 +147,25 @@ ncu的指标原始数值都是一些计数器，比如指令数、访存次数�
 - .max_rate，最大的比率
 
 ### Throughputs
+吞吐量表示一个gpu的指标，与该指标理论峰值的比率。每个吞吐量指标有下列子指标：
+- .pct_of_peak_sustained_active：仅统计active cycle，稳定峰值达成的百分比
+- .pct_of_peak_sustained_elapsed：在整个kernel运行时间内，稳定峰值达成的百分比
+
+吞吐量的指标，是有底层指标来支撑的。
+
+## Cycle Metrics
+
+计数器使用cycle作为时间单位。unit-level cycle指标包括：
+- unit__cycles_elapsed：一段范围内的cycle数量。
+- unit__cycles_active：unit处理数据的cycle数量。
+- unit__cycles_stalled：unit在等待其他unit完成操作的cycle数量。
+- unit__cycles_idle：unit处于闲置的cycle数量。
+
+接口层面cycle计数器一般有下列指标：
+- unit__(interface)_active：数据从src unit搬运到dst unit的cycle数量
+- unit__(interface)_stalled：src unit有数据，但是dst没有接收到数据的cycle数量。
+
+## Instanced Metrics
+
+ncu的metric是有结构的，不是简单的一坨数。有的指标只有一个值，有的指标有多个值，有的两者都有。
+
