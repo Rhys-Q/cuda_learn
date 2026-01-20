@@ -206,3 +206,59 @@ ncu的metric是有结构的，不是简单的一坨数。有的指标只有一�
   - fe：frontend，driver->GPU的入口
   - gr：Graphics/ compute engine
   - pm：performance monitor
+
+# 5 Subunits
+
+ncu中metric命名通常长这样：
+<unit>__<subunit>_<op>_<属性>
+比如l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum，其中pipe_lsu、mem_global都是subunit。
+Subunit = “这次访问，面向的内存类型 / 接口 / 路径是谁”
+
+# 6 Pipelines
+pipeline执行指令，一些pipeline是物理层面的，比如对应物理硬件。另外一些pipeline是逻辑层面的，比如他们是有一个或多个物理pipeline组成。aggregated pipeline表示这种逻辑层面的pipeline，sub pipeline则表示这种物理层面pipeline。
+
+这里pipeline可以理解为一个操作。比如alu pipeline，它是进行聚合计算的，包括位计算、逻辑运算等。
+这里需要在硬件层面思考了，一个指令，比如add，它会调用一个或者多个pipeline来实现。同一个指令可能跑在不同的pipeline上。比如动态选择，一个fp32的add，可能根据调度器的决策，去FMAHeavy，或者去FMALite等。
+有些指令会使用多个pipeline，比如即消耗ALU资源，又消耗FMA资源。所以，pipeline利用率加起来可能超过100%。
+
+# 7 Quantities
+- instruction。是指汇编指令，SASS。每个指令会生成0或多个request。
+- request。操作硬件的指令，比如从global memory加载数据。每个请求会访问1或多个sector。request 里包含：warp中最多32个线程。每个线程的地址。request 是 送进 L1TEX 的最小命令单位。
+- sector。cache line或者device memory中的32字节对齐的memory。L1或者L2 cache line是四个sector，128 字节。如果命中cache（tag存在，sector-data在cache line中），则会将这个访问归类于hit。否则归类于miss。这是扇区的概念，1 sector = 32 字节。1 cache line = 128B = 4 sectors。L1 / L2 都是 128B cache line。即使你只读 4B，只要落在一个 sector，就要把整个 sector 搬进来。
+- cache line的key。一个request可能会访问多个tag。L1和L2都有128字节的cache line。
+- wavefront。L1TEX 的“周期级工作包”。L1TEX 每 cycle 能处理的最大工作包。wavefront = 一次 pipeline 通过量。同一个 wavefront 内：多个 sector并行处理，不同 wavefront：串行，一个 cycle 一个。👉 wavefront 数 ≈ L1TEX pipeline 被占用的 cycle 数
+
+L1TEX是SM内的子系统之一。是 SM（Streaming Multiprocessor）里的一级纹理/数据缓存单元，是一个复合概念，不仅仅是缓存，还包含纹理/共享内存访问的流水线处理。管理 纹理（Texture）、共享内存（Shared）、局部/全局内存的访问，通常与 LSU（Load Store Unit） 配合，在 Volta 及之后架构里，L1TEX 取代了之前的 separate texture cache / shared memory pipelines。
+
+``` 
+SM
+ ├─ ALU / FMA / Tensor Core
+ ├─ LSU (Load/Store Unit)
+ │    └─ 发起内存请求 → L1TEX
+ └─ L1TEX
+      ├─ Tag Stage
+      ├─ Miss Stage
+      └─ Data Stage
+```
+除了寄存器的访问，其他memory相关的操作，都经过L1TEX。
+
+执行流程：
+当一个sm内为一个warp 执行一个global或者local memory指令的时候，会生成一个request给L1TEX。这个request中包含这个warp内32个thread的信息。这个request可能会需要访问多个cache line，以及这些cache line里面的多个sector。
+
+wavefront 是L1TEX每个cycle能处理的最大工作包。如果所需的cache line或者sector不能被一个wavefront处理完，就会分成多个wavefront。
+
+# 8 Range and Precision
+
+## Overview
+如果你发现ncu的指标和你预期的不一样，原因可能有多个。ncu不会对这些异常的指标做修饰，而是直接显示出来。
+## Asynchronous GPU activity
+profile的时候，gpu有可能也同时在给其他进程提供服务。一些资源是共享的，包括L2、DRAM、PCIe、NVLink等。如果profile的kernel本身很轻量，那么其他进程的活动对profile的结果也会有影响。比如DRAM的结果。为了避免这个问题，可以在profile时干掉其他进程，独占显卡进行profile。
+## Multi-pass data collection
+
+指标可能会出现out-of-range的情况，这是由于profiler会replay kernel，不同replay之间，kernel的负载情况不同，且差异大导致的。
+
+以hit rate这个指标为例，如果每次replay，kernel的load balance不同（latency大于20us），那么hit rate也会不同。这样测出来的指标就有问题。
+
+
+为了解决这个问题，可以适度增加负载，以达到稳定状态。此外，也可以减少同时收集的指标。
+
