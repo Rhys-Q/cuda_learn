@@ -169,3 +169,40 @@ ncu的指标原始数值都是一些计数器，比如指令数、访存次数�
 
 ncu的metric是有结构的，不是简单的一坨数。有的指标只有一个值，有的指标有多个值，有的两者都有。
 
+# 3 Metrics Decoder
+
+略
+
+# 4 Units
+
+这一节描述了nv gpu上的硬件单元。指标是围绕这些硬件单元来收集、统计的。
+可以分为6类：
+- 芯片/系统级互连（SoC/封装级）。描述的是GPU和外部世界如何连：
+  - ctc：nvlink c2c
+  - nvltx/nvlrx：nvlink 发送、接收
+  - sys/syslrc/syslts：系统内存、peer memory的L2路径
+- DRAM/内存控制器路径（物理内存）
+  - dram：gpu主存
+  - fbpa：L2 <-> DRAM之间的内存控制分区
+  - mcc：Memory Controller Channel
+  - vidlrc：专门给video/global memory的LRC
+- L2 Cache体系（全芯片共享）
+  - ltc：整个L2 cache
+  - lts：单个L2 slice
+  - ltcfabric：L2 slices之间的互连
+  - lrc：L2请求合并器
+  - xcomp/gxc：写压缩/读解压
+- GPC/TPC级（片上中层）
+  - gpc：general processing cluster
+  - tpc：thread processing cluster
+  - gcc：gpc级常量缓存
+  - icc：TPC级指令缓存
+- SM内部
+  - sm：streaming multiprocessor
+  - smsp：SM子分区（warp 调度&执行单元）
+  - l1tex：L1/Texture Cache
+  - dcc/idc/imc：不同类型的常量缓存
+- 前端/调度/监控
+  - fe：frontend，driver->GPU的入口
+  - gr：Graphics/ compute engine
+  - pm：performance monitor
