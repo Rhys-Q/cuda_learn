@@ -33,3 +33,22 @@ import numpy as np
 
 a = np.random.randn(8, 8).astype(np.float32)
 print_tensor_dlpack(from_dlpack(a))
+
+@cute.jit
+def tensor_access_item(a : cute.Tensor):
+    cute.print_tensor(a)
+    cute.printf("a[1] = {} equivalent to a[{}]", a[1], cute.make_identity_tensor(a.layout.shape)[1],)
+    cute.printf("a[2] = {} equivalent to a[{}]", a[2], cute.make_identity_tensor(a.layout.shape)[2],)
+    
+    cute.printf("a[2,0] = {}", a[2, 0])
+    cute.printf("a[2,4] = {}", a[2, 4])
+    cute.printf("a[(2,4)] = {}", a[2, 4])
+    
+    a[2, 3] = 100.0
+    a[2,4] = 101.0
+    cute.printf("a[2,3] = {}", a[2, 3])
+    cute.printf("a[2,4] = {}", a[2, 4])
+    
+
+data = torch.arange(0, 8*5, dtype=torch.float32).reshape(8, 5)
+tensor_access_item(from_dlpack(data))
