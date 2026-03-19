@@ -195,6 +195,10 @@ def elementwise_add(
     mB: cute.Tensor,
     mC: cute.Tensor,
 ):
+    print("Raw Input Tensors:")
+    print(f"[DSL INFO]   mA = {mA.type}")
+    print(f"[DSL INFO]   mB = {mB.type}")
+    print(f"[DSL INFO]   mC = {mC.type}")
     coalesced_ldst_bytes = 16
     assert all(t.element_type == mA.element_type for t in [mA, mB, mC])
     dtype = mA.element_type
@@ -206,10 +210,27 @@ def elementwise_add(
     
     print(f"[DSL INFO] Tiler: {tiler_mn}")
     print(f"[DSL INFO] TV Layout: {tv_layout}")
-    
+    """
+    Layout Shape : (M, N, L, ...)
+    Tiler Shape  : <TileM, TileN>
+
+    logical_divide : ((TileM,RestM), (TileN,RestN), L, ...)
+    zipped_divide  : ((TileM,TileN), (RestM,RestN,L,...))
+    tiled_divide   : ((TileM,TileN), RestM, RestN, L, ...)
+    flat_divide    : (TileM, TileN, RestM, RestN, L, ...)
+    """
     gA = cute.zipped_divide(mA, tiler_mn)
     gB = cute.zipped_divide(mB, tiler_mn)
     gC = cute.zipped_divide(mC, tiler_mn)
+    print("Tiled Input Tensors:")
+    print("[DSL INFO] Tiled Tensors:")
+    print(f"[DSL INFO]   gA = {gA.type}")
+    print(f"[DSL INFO]   gB = {gB.type}")
+    print(f"[DSL INFO]   gC = {gC.type}")
+    remap_block = cute.make_ordered_layout(cute.select(gA.shape[1], mode=[1, 0]), order=(1, 0))
+    gA = cute.composition(gA, (None, remap_block))
+    gB = cute.composition(gB, (None, remap_block))
+    gC = cute.composition(gC, (None, remap_block))
     
     print("Tiled Input Tensors:")
     print("[DSL INFO] Tiled Tensors:")
