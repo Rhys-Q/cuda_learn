@@ -994,7 +994,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    breakpoint()
     run(
         args.a_major,
         args.b_major,
