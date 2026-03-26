@@ -47,7 +47,7 @@ def copy_async_kernel(tiled_copy: cute.TiledCopy,sync_tiled_copy: cute.TiledCopy
 
 
 @cute.jit
-def copy_async(mA: cute.Tensor, mB: cute.Tensor):
+def copy_async(mA: cute.Tensor, mB: cute.Tensor, use_async: cutlass.Constexpr):
     tiler = [128, 8]
     assert len(tiler) == len(mA.shape)
     grid = [mA.shape[0] // tiler[0] , mA.shape[1] // tiler[1]]
@@ -59,8 +59,13 @@ def copy_async(mA: cute.Tensor, mB: cute.Tensor):
     # create tiled copy
     # first, create tv layout
     atom_copy = cute.make_copy_atom(
-        cute.nvgpu.cpasync.CopyG2SOp(), mA.element_type ,num_bits_per_copy = num_bits_per_copy,
+        cute.nvgpu.CopyUniversalOp(), mA.element_type ,num_bits_per_copy = num_bits_per_copy,
     )
+    if cutlass.const_expr(use_async):
+        atom_copy = cute.make_copy_atom(
+            cute.nvgpu.cpasync.CopyG2SOp(), mA.element_type ,num_bits_per_copy = num_bits_per_copy,
+        )
+
     thr_layout = cute.make_layout((num_thread, 1))
     value_layout = cute.make_layout((1, num_bits_per_copy // num_bits_element))
     tiled_copy = cute.make_tiled_copy_tv(atom=atom_copy,thr_layout=thr_layout, val_layout=value_layout)
@@ -79,14 +84,6 @@ def copy_async(mA: cute.Tensor, mB: cute.Tensor):
     s_layout = cute.make_layout((128, 8), stride=(8,1))
     copy_async_kernel(tiled_copy, sync_tiled_copy, mA,mB, s_layout).launch(grid = grid, block = [num_thread, 1,1], smem = smem_size)
 
-@cute.kernel
-def copy_sync_kernel(mA: cute.Tensor):
-    pass
-
-
-@cute.jit
-def copy_sync(mA: cute.Tensor):
-    pass
 
 def copy_demo():
     shape = [1280, 80]
@@ -97,17 +94,18 @@ def copy_demo():
     cute_tensor = from_dlpack(torch_tensor, assumed_align=16)
     cute_dst_tensor = from_dlpack(dst_tensor, assumed_align=16)
     
-    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor)
+    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor, True)
     
     for _ in range(10):
         compiled(cute_tensor, cute_dst_tensor)
     
     torch.testing.assert_close(torch_tensor, dst_tensor)
-    
-    # compiled = cute.compile(copy_sync, cute_tensor)
-    
-    # for _ in range(10):
-    #     compiled(cute_tensor)
+    dst_tensor = torch.zeros(shape, dtype=dtype).to("cuda")
+    cute_dst_tensor = from_dlpack(dst_tensor, assumed_align=16)
+    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor, False)
+    for _ in range(10):
+        compiled(cute_tensor, cute_dst_tensor)
+    torch.testing.assert_close(torch_tensor, dst_tensor)
     
     
     
