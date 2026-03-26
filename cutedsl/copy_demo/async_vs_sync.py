@@ -94,7 +94,7 @@ def copy_demo():
     cute_tensor = from_dlpack(torch_tensor, assumed_align=16)
     cute_dst_tensor = from_dlpack(dst_tensor, assumed_align=16)
     
-    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor, True)
+    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor, True,options="--keep-ptx")
     
     for _ in range(10):
         compiled(cute_tensor, cute_dst_tensor)
@@ -102,7 +102,7 @@ def copy_demo():
     torch.testing.assert_close(torch_tensor, dst_tensor)
     dst_tensor = torch.zeros(shape, dtype=dtype).to("cuda")
     cute_dst_tensor = from_dlpack(dst_tensor, assumed_align=16)
-    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor, False)
+    compiled = cute.compile(copy_async, cute_tensor, cute_dst_tensor, False, options="--keep-ptx")
     for _ in range(10):
         compiled(cute_tensor, cute_dst_tensor)
     torch.testing.assert_close(torch_tensor, dst_tensor)
