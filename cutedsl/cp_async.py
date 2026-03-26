@@ -1,11 +1,40 @@
 import argparse
 import math
+import os
+import sys
 from typing import Type
 
-import cutlass
-import cutlass.cute as cute
-import cutlass.utils as utils
-from cutlass.cute.runtime import from_dlpack
+
+def _ensure_cute_dsl_arch():
+    # Some launch paths export CUTE_DSL_ARCH as an empty string, which later
+    # turns into an invalid NVVM target chip="". Treat empty and missing the
+    # same way and derive the architecture from the active CUDA device.
+    if os.environ.get("CUTE_DSL_ARCH"):
+        return
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            os.environ["CUTE_DSL_ARCH"] = f"sm_{major}{minor}"
+    except Exception:
+        pass
+
+
+_ensure_cute_dsl_arch()
+
+try:
+    import cutlass
+    import cutlass.cute as cute
+    import cutlass.utils as utils
+    from cutlass.cute.runtime import from_dlpack
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        "Failed to import CUTLASS DSL.\n"
+        f"Current interpreter: {sys.executable}\n"
+        "Please run this file with the py312 environment, for example:\n"
+        "  /root/miniforge3/envs/py312/bin/python /root/tw/cuda_learn/cutedsl/cp_async.py"
+    ) from exc
 
 
 """
