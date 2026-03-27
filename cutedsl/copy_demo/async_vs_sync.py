@@ -63,7 +63,7 @@ def copy_async(mA: cute.Tensor, mB: cute.Tensor, use_async: cutlass.Constexpr):
     )
     if cutlass.const_expr(use_async):
         atom_copy = cute.make_copy_atom(
-            cute.nvgpu.cpasync.CopyG2SOp(), mA.element_type ,num_bits_per_copy = num_bits_per_copy,
+            cute.nvgpu.cpasync.CopyG2SOp(cache_mode = cute.nvgpu.cpasync.LoadCacheMode.STREAMING), mA.element_type ,num_bits_per_copy = num_bits_per_copy,
         )
 
     thr_layout = cute.make_layout((num_thread, 1))
