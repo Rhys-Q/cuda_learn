@@ -18,7 +18,6 @@ def copy_async_kernel(tiled_copy: cute.TiledCopy,sync_tiled_copy: cute.TiledCopy
     s_src = smem.allocate_tensor(mA.element_type ,s_layout, byte_alignment=16)
     
     g_tensor = cute.local_tile(mA, tiler= (128, 8), coord=(bx, by))
-    
     # get thr copy
     thr_copy = tiled_copy.get_slice(tx)
     
