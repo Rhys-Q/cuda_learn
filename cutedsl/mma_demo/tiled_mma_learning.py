@@ -115,15 +115,17 @@ def mma_learning_kernel(
     tCrA_copy_view = thr_copy_s2r_a.retile(tCrA)
     tCsB_copy_view = thr_copy_s2r_b.partition_S(sB)
     tCrB_copy_view = thr_copy_s2r_b.retile(tCrB)
+    tCsA_stage = tCsA_copy_view[None, None, None, 0]
+    tCsB_stage = tCsB_copy_view[None, None, None, 0]
 
     cute.copy(
         tiled_copy_s2r_a,
-        tCsA_copy_view[None, None, None, 0],
+        tCsA_stage[None, None, 0],
         tCrA_copy_view[None, None, 0],
     )
     cute.copy(
         tiled_copy_s2r_b,
-        tCsB_copy_view[None, None, None, 0],
+        tCsB_stage[None, None, 0],
         tCrB_copy_view[None, None, 0],
     )
 
