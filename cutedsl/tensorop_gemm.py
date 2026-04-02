@@ -336,6 +336,10 @@ class TensorOpGemm:
                 coord=tiler_coord,
                 proj=(1, 1, None),
             )
+            if cutlass.dynamic_expr(
+                (bidx == 0) and (bidy == 0) and (bidz == 0) and (tidx == 0)
+            ):
+                cute.printf("only one thread prints\n")
 
             # By default, if the tensor k mode does not divide into the tile k
             # size, then last tiles in the k dimension are irregular.
@@ -931,14 +935,15 @@ def run(
             one_workspace_bytes, warmup_iterations, iterations
         )
 
-    avg_time_us = testing.benchmark(
-        compiled_gemm,
-        workspace_generator=generate_tensors,
-        workspace_count=workspace_count,
-        warmup_iterations=warmup_iterations,
-        iterations=iterations,
-        use_cuda_graphs=False,
-    )
+    # avg_time_us = testing.benchmark(
+    #     compiled_gemm,
+    #     workspace_generator=generate_tensors,
+    #     workspace_count=workspace_count,
+    #     warmup_iterations=warmup_iterations,
+    #     iterations=iterations,
+    #     use_cuda_graphs=False,
+    # )
+    avg_time_us = 0
 
     return avg_time_us  # Return execution time in microseconds
 
