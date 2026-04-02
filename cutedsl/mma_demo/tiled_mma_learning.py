@@ -198,6 +198,7 @@ def mma_learning(mA: cute.Tensor, mB: cute.Tensor, mC: cute.Tensor):
         + cute.size_in_bytes(mC.element_type, sC_layout)
     )
     grid = (mC.shape[0] // tile_m, mC.shape[1] // tile_n)
+    
 
     mma_learning_kernel(
         tiled_copy_a,
