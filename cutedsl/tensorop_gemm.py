@@ -336,10 +336,7 @@ class TensorOpGemm:
                 coord=tiler_coord,
                 proj=(1, 1, None),
             )
-            if cutlass.dynamic_expr(
-                (bidx == 0) and (bidy == 0) and (bidz == 0) and (tidx == 0)
-            ):
-                cute.printf("only one thread prints\n")
+
 
             # By default, if the tensor k mode does not divide into the tile k
             # size, then last tiles in the k dimension are irregular.
@@ -352,7 +349,6 @@ class TensorOpGemm:
             residual_k = cute.size(mA, mode=[1]) - cutlass.Int32(self.bK) * cute.size(
                 gA, mode=[2]
             )
-
             # move the pointer of gA/gB in the `-k` direction
             gA = cute.domain_offset((0, residual_k, 0), gA)
             gB = cute.domain_offset((0, residual_k, 0), gB)
